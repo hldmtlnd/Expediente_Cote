@@ -9,17 +9,27 @@ public class UISetupAutomator : EditorWindow
     public static void SetupUI()
     {
         // Canvas principal
-        var canvasGO = GameObject.Find("TestCanvas") ?? new GameObject("TestCanvas");
-        var canvas = GetOrAdd<Canvas>(canvasGO);
+        var canvasGO = GameObject.Find("TestCanvas");
+        if (canvasGO == null)
+            canvasGO = new GameObject("TestCanvas");
+
+        var canvas = canvasGO.GetComponent<Canvas>();
+        if (canvas == null)
+            canvas = canvasGO.AddComponent<Canvas>();
+
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        GetOrAdd<CanvasScaler>(canvasGO);
-        GetOrAdd<GraphicRaycaster>(canvasGO);
+
+        if (canvasGO.GetComponent<CanvasScaler>() == null)
+            canvasGO.AddComponent<CanvasScaler>();
+
+        if (canvasGO.GetComponent<GraphicRaycaster>() == null)
+            canvasGO.AddComponent<GraphicRaycaster>();
 
         // === PHONE UI ===
         var phonePanel = CreatePanel(canvasGO.transform, "PhonePanel", new Color(0, 0, 0, 0.85f));
         phonePanel.SetActive(false);
 
-        var phoneUI = GetOrAdd<PhoneUI>(phonePanel);
+        var phoneUI = phonePanel.GetComponent<PhoneUI>() ?? phonePanel.AddComponent<PhoneUI>();
         phoneUI.phonePanel = phonePanel;
 
         // Menú del teléfono
@@ -45,7 +55,7 @@ public class UISetupAutomator : EditorWindow
         phoneUI.appPanels = new GameObject[] { cameraApp, galleryApp, messagesApp, segcamsApp };
 
         // SEGCAMS UI
-        var segcamsUI = GetOrAdd<SEGCAMSUI>(segcamsApp);
+        var segcamsUI = segcamsApp.GetComponent<SEGCAMSUI>() ?? segcamsApp.AddComponent<SEGCAMSUI>();
         var grid = CreatePanel(segcamsApp.transform, "GridPanel", new Color(0.1f, 0.1f, 0.1f, 1f));
         var fullView = CreatePanel(segcamsApp.transform, "FullViewPanel", Color.black);
         fullView.SetActive(false);
@@ -56,17 +66,20 @@ public class UISetupAutomator : EditorWindow
         segcamsUI.mainFeed = feed;
 
         // Gallery UI
-        GetOrAdd<GalleryUI>(galleryApp);
+        if (galleryApp.GetComponent<GalleryUI>() == null)
+            galleryApp.AddComponent<GalleryUI>();
 
         // Message UI
-        GetOrAdd<MessageUI>(messagesApp);
+        if (messagesApp.GetComponent<MessageUI>() == null)
+            messagesApp.AddComponent<MessageUI>();
 
         // === INVENTORY UI ===
         var invPanel = CreatePanel(canvasGO.transform, "InventoryPanel", new Color(0, 0, 0, 0.6f));
-        invPanel.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, -200);
-        invPanel.GetComponent<RectTransform>().sizeDelta = new Vector2(400, 80);
+        var invRT = invPanel.GetComponent<RectTransform>();
+        invRT.anchoredPosition = new Vector2(0, -200);
+        invRT.sizeDelta = new Vector2(400, 80);
 
-        var invUI = GetOrAdd<InventoryUI>(invPanel);
+        var invUI = invPanel.GetComponent<InventoryUI>() ?? invPanel.AddComponent<InventoryUI>();
         invUI.slotImages = new Image[5];
         for (int i = 0; i < 5; i++)
         {
@@ -79,8 +92,9 @@ public class UISetupAutomator : EditorWindow
 
         // === BATTERY UI ===
         var batteryPanel = CreatePanel(canvasGO.transform, "BatteryPanel", new Color(0, 0, 0, 0.5f));
-        batteryPanel.GetComponent<RectTransform>().anchoredPosition = new Vector2(200, 180);
-        batteryPanel.GetComponent<RectTransform>().sizeDelta = new Vector2(120, 30);
+        var batRT = batteryPanel.GetComponent<RectTransform>();
+        batRT.anchoredPosition = new Vector2(200, 180);
+        batRT.sizeDelta = new Vector2(120, 30);
 
         var fill = CreateImage(batteryPanel.transform, "BatteryFill", Color.green);
         var fillRT = fill.GetComponent<RectTransform>();
@@ -88,18 +102,21 @@ public class UISetupAutomator : EditorWindow
         fillRT.anchorMax = Vector2.one;
         fillRT.offsetMin = new Vector2(2, 2);
         fillRT.offsetMax = new Vector2(-2, -2);
-        fill.GetComponent<Image>().type = Image.Type.Filled;
-        fill.GetComponent<Image>().fillMethod = Image.FillMethod.Horizontal;
+        var fillImg = fill.GetComponent<Image>();
+        fillImg.type = Image.Type.Filled;
+        fillImg.fillMethod = Image.FillMethod.Horizontal;
 
-        var batteryUI = GetOrAdd<BatteryUI>(batteryPanel);
-        batteryUI.batteryFill = fill.GetComponent<Image>();
+        var batteryUI = batteryPanel.GetComponent<BatteryUI>() ?? batteryPanel.AddComponent<BatteryUI>();
+        batteryUI.batteryFill = fillImg;
 
         // === NOTIFICATION ===
         var notifPanel = CreatePanel(canvasGO.transform, "NotificationPanel", new Color(0.1f, 0.1f, 0.1f, 0.9f));
-        notifPanel.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, 150);
-        notifPanel.GetComponent<RectTransform>().sizeDelta = new Vector2(300, 50);
+        var notifRT = notifPanel.GetComponent<RectTransform>();
+        notifRT.anchoredPosition = new Vector2(0, 150);
+        notifRT.sizeDelta = new Vector2(300, 50);
         notifPanel.SetActive(false);
-        GetOrAdd<PhoneNotification>(notifPanel);
+        if (notifPanel.GetComponent<PhoneNotification>() == null)
+            notifPanel.AddComponent<PhoneNotification>();
 
         // === INTERACTION PROMPT ===
         var prompt = CreateText(canvasGO.transform, "InteractionPrompt", "E para interactuar");
@@ -125,37 +142,67 @@ public class UISetupAutomator : EditorWindow
 
     static GameObject CreatePanel(Transform parent, string name, Color color)
     {
-        var go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        var img = go.AddComponent<Image>();
+        var existing = parent.Find(name);
+        GameObject go;
+        if (existing != null)
+            go = existing.gameObject;
+        else
+        {
+            go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+        }
+
+        var img = go.GetComponent<Image>() ?? go.AddComponent<Image>();
         img.color = color;
-        var rt = go.GetComponent<RectTransform>();
+
+        var rt = go.GetComponent<RectTransform>() ?? go.AddComponent<RectTransform>();
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
+
         return go;
     }
 
     static GameObject CreateButton(Transform parent, string name, string label, Vector2 pos)
     {
-        var go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        var img = go.AddComponent<Image>();
+        var existing = parent.Find(name);
+        GameObject go;
+        if (existing != null)
+            go = existing.gameObject;
+        else
+        {
+            go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+        }
+
+        var img = go.GetComponent<Image>() ?? go.AddComponent<Image>();
         img.color = new Color(0.2f, 0.2f, 0.2f, 1f);
-        var btn = go.AddComponent<Button>();
-        var rt = go.GetComponent<RectTransform>();
+
+        if (go.GetComponent<Button>() == null)
+            go.AddComponent<Button>();
+
+        var rt = go.GetComponent<RectTransform>() ?? go.AddComponent<RectTransform>();
         rt.sizeDelta = new Vector2(160, 40);
         rt.anchoredPosition = pos;
 
-        var textGO = new GameObject("Text");
-        textGO.transform.SetParent(go.transform, false);
-        var tmp = textGO.AddComponent<TextMeshProUGUI>();
+        var textChild = go.transform.Find("Text");
+        GameObject textGO;
+        if (textChild != null)
+            textGO = textChild.gameObject;
+        else
+        {
+            textGO = new GameObject("Text");
+            textGO.transform.SetParent(go.transform, false);
+        }
+
+        var tmp = textGO.GetComponent<TextMeshProUGUI>() ?? textGO.AddComponent<TextMeshProUGUI>();
         tmp.text = label;
         tmp.alignment = TextAlignmentOptions.Center;
         tmp.fontSize = 18;
         tmp.color = Color.white;
-        var textRT = textGO.GetComponent<RectTransform>();
+
+        var textRT = textGO.GetComponent<RectTransform>() ?? textGO.AddComponent<RectTransform>();
         textRT.anchorMin = Vector2.zero;
         textRT.anchorMax = Vector2.one;
         textRT.offsetMin = Vector2.zero;
@@ -166,41 +213,63 @@ public class UISetupAutomator : EditorWindow
 
     static GameObject CreateImage(Transform parent, string name, Color color)
     {
-        var go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        var img = go.AddComponent<Image>();
+        var existing = parent.Find(name);
+        GameObject go;
+        if (existing != null)
+            go = existing.gameObject;
+        else
+        {
+            go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+        }
+
+        var img = go.GetComponent<Image>() ?? go.AddComponent<Image>();
         img.color = color;
         return go;
     }
 
     static RawImage CreateRawImage(Transform parent, string name)
     {
-        var go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        var raw = go.AddComponent<RawImage>();
+        var existing = parent.Find(name);
+        GameObject go;
+        if (existing != null)
+            go = existing.gameObject;
+        else
+        {
+            go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+        }
+
+        var raw = go.GetComponent<RawImage>() ?? go.AddComponent<RawImage>();
         raw.color = Color.white;
-        var rt = go.GetComponent<RectTransform>();
+
+        var rt = go.GetComponent<RectTransform>() ?? go.AddComponent<RectTransform>();
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
+
         return raw;
     }
 
     static GameObject CreateText(Transform parent, string name, string content)
     {
-        var go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        var tmp = go.AddComponent<TextMeshProUGUI>();
+        var existing = parent.Find(name);
+        GameObject go;
+        if (existing != null)
+            go = existing.gameObject;
+        else
+        {
+            go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+        }
+
+        var tmp = go.GetComponent<TextMeshProUGUI>() ?? go.AddComponent<TextMeshProUGUI>();
         tmp.text = content;
         tmp.alignment = TextAlignmentOptions.Center;
         tmp.fontSize = 20;
         tmp.color = Color.white;
-        return go;
-    }
 
-    static T GetOrAdd<T>(GameObject go) where T : Component
-    {
-        return go.GetComponent<T>() ?? go.AddComponent<T>();
+        return go;
     }
 }
