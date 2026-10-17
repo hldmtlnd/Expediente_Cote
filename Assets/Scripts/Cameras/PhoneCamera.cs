@@ -10,6 +10,12 @@ public class PhoneCamera : MonoBehaviour
 
     public DeviceBattery battery;
 
+    void Start()
+    {
+        if (phoneCam == null)
+            phoneCam = GetComponent<Camera>();
+    }
+
     void Update()
     {
         if (!enabled) return;
@@ -27,6 +33,7 @@ public class PhoneCamera : MonoBehaviour
 
     void AdjustZoom(float delta)
     {
+        if (phoneCam == null) return;
         phoneCam.fieldOfView = Mathf.Clamp(phoneCam.fieldOfView - delta * 10f, 10f, 80f);
     }
 
@@ -38,6 +45,7 @@ public class PhoneCamera : MonoBehaviour
 
     void ToggleFlash()
     {
+        if (battery == null) return;
         if (battery.GetPercentage() <= 10f) return;
         flashOn = !flashOn;
         // Enable/disable light
