@@ -14,11 +14,14 @@ public class InventoryUI : MonoBehaviour
 
     void RefreshSlots()
     {
-        for (int i = 0; i < slotImages.Length && i < inventory.slots.Count; i++)
+        if (inventory == null || slotImages == null) return;
+
+        for (int i = 0; i < slotImages.Length; i++)
         {
-            if (inventory.slots[i] != null)
+            if (slotImages[i] == null) continue;
+
+            if (i < inventory.slots.Count && inventory.slots[i] != null)
             {
-                // Set icon based on item type
                 slotImages[i].color = Color.white;
             }
             else
