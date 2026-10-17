@@ -10,14 +10,20 @@ public class PlayerInteraction : MonoBehaviour
     void Start()
     {
         mainCam = Camera.main;
+        if (mainCam == null)
+        {
+            // Fallback: search any active camera
+            mainCam = FindObjectOfType<Camera>();
+        }
     }
 
     void Update()
     {
+        if (mainCam == null) return;
+
         if (Input.GetKeyDown(KeyCode.E))
             TryInteract();
 
-        // Recording and flash handled by phone/camera scripts
         if (Input.GetMouseButtonDown(0))
             OnLeftClick();
 
@@ -27,6 +33,8 @@ public class PlayerInteraction : MonoBehaviour
 
     void TryInteract()
     {
+        if (mainCam == null) return;
+
         Ray ray = new Ray(mainCam.transform.position, mainCam.transform.forward);
         if (Physics.Raycast(ray, out RaycastHit hit, interactDistance, interactableLayer))
         {
@@ -43,6 +51,11 @@ public class PlayerInteraction : MonoBehaviour
     void OnRightClick()
     {
         // Toggle flash — delegated to active camera device
+    }
+
+    public void SetCamera(Camera cam)
+    {
+        mainCam = cam;
     }
 }
 
