@@ -8,16 +8,28 @@ public class PhysicsSetupAutomator : EditorWindow
     public static void SetupPhysics()
     {
         int count = 0;
+        int skipped = 0;
 
-        // Buscar objetos que puedan ser props (tienen MeshRenderer o MeshCollider y no son terreno/estructura)
         var allRenderers = Object.FindObjectsByType<MeshRenderer>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
 
         foreach (var renderer in allRenderers)
         {
             var go = renderer.gameObject;
 
-            // Ignorar si es parte de la estructura principal o del player
-            if (IsStructural(go)) continue;
+            if (IsStructural(go))
+            {
+                skipped++;
+                continue;
+            }
+
+            // Revisar colliders existentes
+            var meshCol = go.GetComponent<MeshCollider>();
+            if (meshCol != null && !meshCol.convex)
+            {
+                // MeshCollider cóncavo + Rigidbody dinámico no es válido
+                // Opción: hacerlo convex o saltarlo
+                meshCol.convex = true;
+            }
 
             // Agregar Rigidbody si no tiene
             var rb = go.GetComponent<Rigidbody>();
@@ -31,14 +43,13 @@ public class PhysicsSetupAutomator : EditorWindow
                 rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             }
 
-            // Asegurar collider
+            // Asegurar algún collider
             if (go.GetComponent<Collider>() == null)
             {
-                var col = go.AddComponent<BoxCollider>();
-                // Ajustar tamaño aproximado
+                go.AddComponent<BoxCollider>();
             }
 
-            // Physic Material básico
+            // Physic Material
             var collider = go.GetComponent<Collider>();
             if (collider != null && collider.sharedMaterial == null)
             {
@@ -53,38 +64,53 @@ public class PhysicsSetupAutomator : EditorWindow
                 collider.sharedMaterial = mat;
             }
 
-            // Agregar script de impacto si no lo tiene
             if (go.GetComponent<PropImpact>() == null)
                 go.AddComponent<PropImpact>();
 
             count++;
         }
 
-        // Crear el sistema de pickup en el player si no existe
+        // PlayerPickup
         var player = GameObject.Find("Player");
         if (player != null && player.GetComponent<PlayerPickup>() == null)
-        {
             player.AddComponent<PlayerPickup>();
-        }
 
         Debug.Log($"[Expediente] Source Physics setup complete.\n" +
                   $"- Props configured: {count}\n" +
-                  $"- PlayerPickup added to Player");
+                  $"- Structural skipped: {skipped}\n" +
+                  $"- PlayerPickup added");
     }
 
     static bool IsStructural(GameObject go)
     {
-        string name = go.name.ToLower();
-        string parentName = go.transform.parent != null ? go.transform.parent.name.ToLower() : "";
+        string path = GetFullPath(go).ToLower();
 
-        // Ignorar pisos, paredes, techos, terreno, player, cámaras
-        if (name.Contains("floor") || name.Contains("wall") || name.Contains("ceiling") ||
-            name.Contains("celling") || name.Contains("terrain") || name.Contains("foundation") ||
-            name.Contains("player") || name.Contains("secam") || name.Contains("segcam") ||
-            name.Contains("camera") || parentName.Contains("foundation") || parentName.Contains("walls"))
+        // Ignorar estructura de la casa, terreno, player, cámaras, alien
+        if (path.Contains("foundation") || path.Contains("floor") || path.Contains("wall") ||
+            path.Contains("ceiling") || path.Contains("celling") || path.Contains("terrain") ||
+            path.Contains("player") || path.Contains("secam") || path.Contains("segcam") ||
+            path.Contains("alien") || path.Contains("huguito") || path.Contains("mutilation") ||
+            path.Contains("habitaciones") || path.Contains("staticlighting") ||
+            path.Contains("probevolume") || path.Contains("debb"))
+            return true;
+
+        // Ignorar planos grandes
+        if (go.name.ToLower().Contains("plane") || go.name.ToLower().Contains("concrete"))
             return true;
 
         return false;
+    }
+
+    static string GetFullPath(GameObject go)
+    {
+        string path = go.name;
+        Transform t = go.transform.parent;
+        while (t != null)
+        {
+            path = t.name + "/" + path;
+            t = t.parent;
+        }
+        return path;
     }
 
     static float EstimateMass(GameObject go)
@@ -94,11 +120,10 @@ public class PhysicsSetupAutomator : EditorWindow
 
         var size = renderer.bounds.size;
         float volume = size.x * size.y * size.z;
-        return Mathf.Clamp(volume * 50f, 0.5f, 50f); // masa aproximada
+        return Mathf.Clamp(volume * 30f, 0.3f, 30f);
     }
 }
 
-// Script de impacto para props
 public class PropImpact : MonoBehaviour
 {
     public float minImpactForce = 2f;
@@ -112,34 +137,32 @@ public class PropImpact : MonoBehaviour
     void OnCollisionEnter(Collision collision)
     {
         if (rb == null) return;
-
         float force = collision.relativeVelocity.magnitude;
         if (force > minImpactForce)
         {
-            // Aquí se puede reproducir sonido de impacto
-            // AudioManager.Instance?.PlaySFX(impactClip);
+            // Audio impact placeholder
         }
     }
 }
 
-// Sistema de pickup tipo Source
 public class PlayerPickup : MonoBehaviour
 {
     public float pickupRange = 3f;
     public float holdDistance = 2f;
-    public float throwForce = 10f;
-    public LayerMask propLayer;
+    public float throwForce = 8f;
 
     private Rigidbody heldObject;
     private Camera cam;
 
     void Start()
     {
-        cam = Camera.main ?? FindAnyObjectByType<Camera>();
+        cam = Camera.main ?? Object.FindAnyObjectByType<Camera>();
     }
 
     void Update()
     {
+        if (cam == null) return;
+
         if (Input.GetMouseButtonDown(0) && heldObject == null)
             TryPickup();
 
@@ -152,8 +175,6 @@ public class PlayerPickup : MonoBehaviour
 
     void TryPickup()
     {
-        if (cam == null) return;
-
         Ray ray = new Ray(cam.transform.position, cam.transform.forward);
         if (Physics.Raycast(ray, out RaycastHit hit, pickupRange))
         {
@@ -162,24 +183,22 @@ public class PlayerPickup : MonoBehaviour
             {
                 heldObject = rb;
                 heldObject.useGravity = false;
-                heldObject.linearDamping = 10f;
+                heldObject.linearDamping = 8f;
             }
         }
     }
 
     void HoldObject()
     {
-        if (cam == null || heldObject == null) return;
-
+        if (heldObject == null) return;
         Vector3 targetPos = cam.transform.position + cam.transform.forward * holdDistance;
         Vector3 dir = targetPos - heldObject.position;
-        heldObject.linearVelocity = dir * 10f;
+        heldObject.linearVelocity = dir * 8f;
     }
 
     void Throw()
     {
         if (heldObject == null) return;
-
         heldObject.useGravity = true;
         heldObject.linearDamping = 0.1f;
         heldObject.AddForce(cam.transform.forward * throwForce, ForceMode.VelocityChange);
